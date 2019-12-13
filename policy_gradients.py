@@ -232,7 +232,7 @@ def actor_critic():
                         if average_rewards > 475:
                             time = datetime.now().strftime("%m-%d-%Y-%H-%M-%S-episode-break-{}".format(episode))
                             print_tests_in_tensorboard(
-                                path_for_file_or_name_of_file="REINFORCE_WITH_BASELINE_{}_{}".format(episode, time),
+                                path_for_file_or_name_of_file="ACTOR_CRITIC_{}_{}".format(episode, time),
                                 data_holder=data_holder)
                             print(' Solved at episode: ' + str(episode))
                             solved = True
