@@ -13,15 +13,19 @@ np.random.seed(1)
 # Define hyperparameters
 state_size = 4
 action_size = env.action_space.n
-
-max_episodes = 5000
+max_episodes = 1000
 max_steps = 501
 discount_factor = 0.99
-learning_rate_policy_network = 0.0005
-learning_rate_value_network = 0.0005
+learning_rate_policy_network = 0.0001
+learning_rate_value_network = 0.0001
+neurones_policy = [64, 64, 64, 64, 64]
+neurones_value = [64, 64, 64, 64, 64]
+kernel_initializer = tf.contrib.layers.xavier_initializer()
+render = False
+algorithm = 3  # 1 for REINFORCE , 2 for REINFORCE WITH BASELINE , 3 for ACTOR-CRITIC
 
 
-class PolicyNetwork:
+class PolicyActorNetwork:
     def __init__(self, state_size, action_size, learning_rate, name='policy_network'):
         self.state_size = state_size
         self.action_size = action_size
@@ -33,24 +37,26 @@ class PolicyNetwork:
             self.action = tf.placeholder(tf.int32, [self.action_size], name="action")
             self.R_t = tf.placeholder(tf.float32, name="total_rewards")
 
-            self.W1 = tf.get_variable("W1", [self.state_size, 24], initializer=tf.contrib.layers.xavier_initializer(seed=0))
-            self.b1 = tf.get_variable("b1", [24], initializer=tf.zeros_initializer())
-            self.W2 = tf.get_variable("W2", [24, self.action_size], initializer=tf.contrib.layers.xavier_initializer(seed=0))
-            self.b2 = tf.get_variable("b2", [self.action_size], initializer=tf.zeros_initializer())
+            layer = tf.layers.dense(units=neurones_policy[0], inputs=self.state,
+                                    kernel_initializer=kernel_initializer,
+                                    activation=tf.nn.relu)
 
-            self.Z1 = tf.add(tf.matmul(self.state, self.W1), self.b1)
-            self.A1 = tf.nn.relu(self.Z1)
-            self.output = tf.add(tf.matmul(self.A1, self.W2), self.b2)
+            for idx in range(1, len(neurones_policy)-1):
+                layer = tf.layers.dense(units=neurones_policy[idx], inputs=layer,
+                                        kernel_initializer=kernel_initializer,
+                                        activation=tf.nn.relu)
 
-            # Softmax probability distribution over actions
+            self.output = tf.layers.dense(units=action_size, inputs=layer,
+                                          kernel_initializer=kernel_initializer,
+                                          activation=None)
+
             self.actions_distribution = tf.squeeze(tf.nn.softmax(self.output))
-            # Loss with negative log probability
             self.neg_log_prob = tf.nn.softmax_cross_entropy_with_logits_v2(logits=self.output, labels=self.action)
             self.loss = tf.reduce_mean(self.neg_log_prob * self.R_t)
             self.optimizer = tf.train.AdamOptimizer(learning_rate=self.learning_rate).minimize(self.loss)
 
 
-class ValueNetwork:
+class ValueCriticNetwork:
     def __init__(self, state_size, learning_rate, name='value_network'):
         self.state_size = state_size
         self.learning_rate = learning_rate
@@ -59,25 +65,26 @@ class ValueNetwork:
 
             self.state = tf.placeholder(tf.float32, [None, self.state_size], name="state")
             self.value = tf.placeholder(dtype=tf.float32, name="value")
-            neurons = 10
-            self.W1 = tf.get_variable("W1", [self.state_size, neurons], initializer=tf.contrib.layers.xavier_initializer(seed=0))
-            self.b1 = tf.get_variable("b1", [neurons], initializer=tf.zeros_initializer())
 
-            # self.W2 = tf.get_variable("W2", [24, 1], initializer=tf.contrib.layers.xavier_initializer(seed=0))
-            # self.b2 = tf.get_variable("b2", [1], initializer=tf.zeros_initializer())
+            layer = tf.layers.dense(units=neurones_value[0], inputs=self.state,
+                                kernel_initializer=kernel_initializer,
+                                activation=tf.nn.relu)
 
-            self.Z1 = tf.add(tf.matmul(self.state, self.W1), self.b1)
-            self.A1 = tf.nn.relu(self.Z1)
-            self.output = tf.add(self.A1, self.b1)
+            for idx in range(1, len(neurones_value)-1):
+                layer = tf.layers.dense(units=neurones_value[idx], inputs=layer,
+                                    kernel_initializer=kernel_initializer,
+                                    activation=tf.nn.relu)
+
+            self.output = tf.layers.dense(units=action_size, inputs=layer,
+                                          kernel_initializer=kernel_initializer,
+                                          activation=None)
 
             self.value_estimate = tf.squeeze(self.output)
-            # Loss with negative log probability
             self.loss = tf.squared_difference(self.value_estimate, self.value)
             self.optimizer = tf.train.AdamOptimizer(learning_rate=self.learning_rate).minimize(self.loss)
 
 
-
-def print_tests_in_TensorBoard(path_for_file_or_name_of_file=None, read_from_file=False, data_holder=None):
+def print_tests_in_tensorboard(path_for_file_or_name_of_file=None, read_from_file=False, data_holder=None):
     if read_from_file:
         data_holder_to_visualize = np.load(path_for_file_or_name_of_file)
         name_of_log_dir = '{}-{}'.format(path_for_file_or_name_of_file.split("/")[3],
@@ -96,29 +103,18 @@ def print_tests_in_TensorBoard(path_for_file_or_name_of_file=None, read_from_fil
                                  average_rewards=data_of_episode[2])
 
 
-render = False
-
-# Initialize the policy network
-tf.reset_default_graph()
-policy = PolicyNetwork(state_size, action_size, learning_rate_policy_network)
-Value = ValueNetwork(state_size, learning_rate_value_network)
-
-
-# Start training the agent with REINFORCE algorithm
-
 def reinforce():
     while True:
         data_holder = []
         # Initialize the policy network
         tf.reset_default_graph()
-        policy = PolicyNetwork(state_size, action_size, learning_rate_policy_network)
-        Value = ValueNetwork(state_size, learning_rate_value_network)
+        policy = PolicyActorNetwork(state_size, action_size, learning_rate_policy_network)
+        Value = ValueCriticNetwork(state_size, learning_rate_value_network)
         with tf.Session() as sess:
             sess.run(tf.global_variables_initializer())
             solved = False
             Transition = collections.namedtuple("Transition", ["state", "action", "reward", "next_state", "done"])
             episode_rewards = np.zeros(max_episodes)
-            average_rewards = 0.0
 
             for episode in range(max_episodes):
                 state = env.reset()
@@ -149,7 +145,7 @@ def reinforce():
                         print("Episode {} Reward: {} Average over 100 episodes: {}".format(episode, episode_rewards[episode], round(average_rewards, 2)))
                         if average_rewards > 475:
                             time = datetime.now().strftime("%m-%d-%Y-%H-%M-%S-episode-break-{}".format(episode))
-                            print_tests_in_TensorBoard(
+                            print_tests_in_tensorboard(
                                 path_for_file_or_name_of_file="REINFORCE_WITH_BASELINE_{}_{}".format(episode, time),
                                 data_holder=data_holder)
                             print(' Solved at episode: ' + str(episode))
@@ -163,30 +159,37 @@ def reinforce():
                 # Compute Rt for each time-step t and update the network's weights
                 for t, transition in enumerate(episode_transitions):
                     total_discounted_return = sum(discount_factor ** i * t.reward for i, t in enumerate(episode_transitions[t:])) # Rt
-                    baseline = sess.run(Value.value_estimate, {Value.state: transition.state})
 
-                    advantage = total_discounted_return - baseline
+                    # REINFORCE WITH BASELINE
+                    if algorithm == 2:
+                        baseline = sess.run(Value.value_estimate, {Value.state: transition.state})
 
-                    feed_dict = {Value.state: transition.state, Value.value: total_discounted_return}
-                    _, loss = sess.run([Value.optimizer, Value.loss], feed_dict)
+                        advantage = total_discounted_return - baseline
 
-                    feed_dict = {policy.state: transition.state, policy.R_t: advantage, policy.action: transition.action}
-                    _, loss = sess.run([policy.optimizer, policy.loss], feed_dict)
+                        feed_dict = {Value.state: transition.state, Value.value: total_discounted_return}
+                        _, loss = sess.run([Value.optimizer, Value.loss], feed_dict)
+
+                        feed_dict = {policy.state: transition.state, policy.R_t: advantage, policy.action: transition.action}
+                        _, loss = sess.run([policy.optimizer, policy.loss], feed_dict)
+
+                    # REINFORCE
+                    else:
+                        feed_dict = {policy.state: transition.state, policy.R_t: total_discounted_return, policy.action: transition.action}
+                        _, loss = sess.run([policy.optimizer, policy.loss], feed_dict)
 
 
 def actor_critic():
     while True:
         data_holder = []
-        # Initialize the policy network
+        # Initialize the networks
         tf.reset_default_graph()
-        policy = PolicyNetwork(state_size, action_size, learning_rate_policy_network)
-        Value = ValueNetwork(state_size, learning_rate_value_network)
+        policy = PolicyActorNetwork(state_size, action_size, learning_rate_policy_network)
+        Value = ValueCriticNetwork(state_size, learning_rate_value_network)
         with tf.Session() as sess:
             sess.run(tf.global_variables_initializer())
             solved = False
             Transition = collections.namedtuple("Transition", ["state", "action", "reward", "next_state", "done"])
             episode_rewards = np.zeros(max_episodes)
-            average_rewards = 0.0
 
             for episode in range(max_episodes):
                 state = env.reset()
@@ -207,7 +210,7 @@ def actor_critic():
                     episode_transitions.append(Transition(state=state, action=action_one_hot, reward=reward, next_state=next_state, done=done))
                     episode_rewards[episode] += reward
 
-                    value_nex_state = sess.run(Value.value_estimate, {Value.state: next_state})
+                    value_nex_state = 0 if done else sess.run(Value.value_estimate, {Value.state: next_state})
                     td_target = reward + discount_factor * value_nex_state
                     td_error = td_target - sess.run(Value.value_estimate, {Value.state: state})
 
@@ -228,7 +231,7 @@ def actor_critic():
                         print("Episode {} Reward: {} Average over 100 episodes: {}".format(episode, episode_rewards[episode], round(average_rewards, 2)))
                         if average_rewards > 475:
                             time = datetime.now().strftime("%m-%d-%Y-%H-%M-%S-episode-break-{}".format(episode))
-                            print_tests_in_TensorBoard(
+                            print_tests_in_tensorboard(
                                 path_for_file_or_name_of_file="REINFORCE_WITH_BASELINE_{}_{}".format(episode, time),
                                 data_holder=data_holder)
                             print(' Solved at episode: ' + str(episode))
@@ -240,4 +243,8 @@ def actor_critic():
                     break
 
 
-actor_critic()
+# Algorithm execution
+if algorithm in [1, 2]:
+    reinforce()
+else:
+    actor_critic()
