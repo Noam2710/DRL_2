@@ -1,1 +1,1 @@
-Second assigment of Deep Reinforcement Learning Course
+policy gradient methods implementation using TensorFlow and Open AI Gym
