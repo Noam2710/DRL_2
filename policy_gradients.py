@@ -13,7 +13,7 @@ np.random.seed(1)
 # Define hyperparameters
 state_size = 4
 action_size = env.action_space.n
-max_episodes = 1000
+max_episodes = 100
 max_steps = 501
 discount_factor = 0.99
 learning_rate_policy_network = 0.0001
@@ -22,7 +22,7 @@ neurones_policy = [64, 64, 64, 64, 64]
 neurones_value = [64, 64, 64, 64, 64]
 kernel_initializer = tf.contrib.layers.xavier_initializer()
 render = False
-algorithm = 3  # 1 for REINFORCE , 2 for REINFORCE WITH BASELINE , 3 for ACTOR-CRITIC
+algorithm = 2  # 1 for REINFORCE , 2 for REINFORCE WITH BASELINE , 3 for ACTOR-CRITIC
 
 
 class PolicyActorNetwork:
@@ -143,10 +143,10 @@ def reinforce():
                             average_rewards = 0
                         data_holder.append([episode, step, average_rewards])
                         print("Episode {} Reward: {} Average over 100 episodes: {}".format(episode, episode_rewards[episode], round(average_rewards, 2)))
-                        if average_rewards > 475:
+                        if average_rewards > 475 and episode > 786:
                             time = datetime.now().strftime("%m-%d-%Y-%H-%M-%S-episode-break-{}".format(episode))
                             print_tests_in_tensorboard(
-                                path_for_file_or_name_of_file="REINFORCE_WITH_BASELINE_{}_{}".format(episode, time),
+                                path_for_file_or_name_of_file="REINFORCE_{}_NEW_{}_{}".format(algorithm, episode, time),
                                 data_holder=data_holder)
                             print(' Solved at episode: ' + str(episode))
                             solved = True
